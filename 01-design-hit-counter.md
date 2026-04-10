@@ -22,6 +22,66 @@
 
 ---
 
+## FR, NFR, core entities & API (say this for SDE2)
+
+Uber-style LLD still expects you to **name** these—not only code. After clarifying, spend **1–2 minutes** labeling them on the board or out loud; then dive into data structures and implementation.
+
+### Functional requirements (FR)
+
+What the system **must do** (adjust wording to what the interviewer confirmed):
+
+- Record a **hit** for a given **page** (or globally, if they said so).
+- Return **how many hits** that page had in the **last N minutes** (or fixed window).
+- (Optional FRs only if they ask) list pages, reset counter, admin APIs—don’t invent scope.
+
+**What you can say:** “Let me list **functional requirements**: record a visit per page, and query the count in the sliding window we agreed on.”
+
+### Non-functional requirements (NFR)
+
+Constraints and “-ilities” you assume or confirm:
+
+| Area | Typical NFR for this problem | One line you might say |
+|------|------------------------------|-------------------------|
+| **Performance** | `record_hit` and `get_hits` fast on hot paths | “Hot path should be **predictable**—no scan over every hit.” |
+| **Memory** | Bounded per page / overall | “Memory should **not grow with total hits**—only with window and number of pages.” |
+| **Concurrency** | Safe under parallel calls if required | “If multi-threaded, I need **correct counts**—I’ll use **per-page locking** (or start single-threaded).” |
+| **Correctness** | No double-count outside window; consistent `now` | “**Invariant**: query never includes minutes **outside** the window.” |
+| **Operability / testability** | Injectable time | “I want to **inject `now`** so tests are deterministic.” |
+
+**What you can say:** “On the **non-functional** side: bounded memory, predictable latency, thread safety if you need it, and testable time.”
+
+### Core entities (object model)
+
+**Entities** = nouns; keep to **2–3** unless the problem grows.
+
+| Entity | Responsibility |
+|--------|----------------|
+| **`PageHitCounter`** (or `SlidingWindowCounter`) | Ring buffer of minute buckets for **one** page; `record_hit`, `get_hits` for that page. |
+| **`HitCounterService`** | Maps **`page_id` → `PageHitCounter`**; public API for callers. |
+
+**Relationships:** Service **owns** many counters; each counter **owns** its buckets. No separate “Hit” entity if you bucket—hits are aggregated.
+
+**What you can say:** “**Core entities**: a per-page counter with the sliding window, and a **service** that routes `page_id` to the right counter.”
+
+### API design
+
+Put **method signatures** on the board before you code. Keep the surface **small**.
+
+| Method | Purpose | Notes |
+|--------|---------|--------|
+| `record_hit(page_id)` | Increment count for “now” | Pass `now` optionally if testing. |
+| `get_hits(page_id)` | Sum hits in window | Same optional `now`; align window length with constructor or param. |
+
+**Design choices to mention:** idempotency usually **not** required for `record_hit` (each call = +1); errors for unknown `page_id` vs lazy-create—**state your choice** (`defaultdict` = lazy create).
+
+**What you can say:** “**Public API** stays minimal: **record** and **query**. Everything else stays private.”
+
+### Order in the interview (quick mnemonic)
+
+**Clarify → FR / NFR (short) → entities → API on board → data structure + code → complexity.**
+
+---
+
 ## Requirements snapshot (after alignment)
 
 - `record_hit(page_id)` — count one visit.
