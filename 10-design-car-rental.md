@@ -4,24 +4,34 @@
 
 ---
 
+## Correct interview flow (this document)
+
+Same order as **README**. Do **not** open with **ordinals** / **half-open** until **date semantics**, **pricing**, and **late fee** rules are agreed.
+
+---
+
 ## Interview script & checklist (human speaking)
 
-### Opening
+### Opening (clarify-first)
 
-“I’ll treat bookings as **full-day blocks** on a **calendar**. To avoid off-by-one bugs, I’ll convert to **ordinal days** and use **half-open intervals** internally—e.g. `[pickup_ordinal, return_exclusive_ordinal)`—while narrating how that maps to **inclusive** dates the user sees. Invariant: **no overlapping bookings for the same car**. **`complete_trip`** applies **base rate × booked days** plus **late fees** and any **extras** we agree on.”
+“**Full-day** bookings only? Are pickup/return **inclusive** dates on the UI—how do we avoid **off-by-one**? **Late fee** per day after agreed return? **Early return**—refund or full charge? **Extras** at checkout? **Same car**—**no overlap**? **Who** creates `booking_id`?”
+
+**Pause.** Then:
+
+“**Invariant**: **no overlapping bookings per car**; **checkout** matches agreed **pricing rules**. I’ll do **FR/NFR**, **`register` / `book` / `complete_trip`** on the board, **then** map dates to a clear interval model and implement overlap + pricing.”
 
 ### Flow — cover in this order
 
-1. **Clarify** — inclusive vs exclusive end date, late fee per day, early return refund policy, extras.  
-2. **Invariants** — non-overlap per car; `complete_trip` charges consistent with stored booking window.  
-3. **Entities** — `Car` (rates), per-car sorted bookings, `booking_id → booking` for checkout.  
-4. **APIs** — `register_car`, `book(...) -> bool`, `complete_trip(booking_id, actual_return, extras) -> Optional[int]`.  
-5. **Data structures** — same as meeting rooms: sorted intervals + bisect; ordinal math for days.  
-6. **Code** — **`book`** (overlap) and **`complete_trip`** (pricing + remove booking).  
-7. **Edge cases** — invalid date order, late by N days, unknown booking id.  
-8. **Complexity** — book O(n) insert; complete O(1) with map.  
-9. **Scale** — shard by car or region; **PricingEngine** strategy for surge/weekend.  
-10. **Testing** — adjacent bookings; late return fee.
+1. **Open / clarify** — as above + table.  
+2. **FR / NFR** — section below.  
+3. **Invariant** — non-overlap; checkout = rules + release car.  
+4. **Entities** — car, service, bookings **after** API.  
+5. **APIs on board** — `register_car`, `book`, `complete_trip`.  
+6. **Data structures** — **ordinals + half-open** intervals per car + booking map.  
+7. **Code** — **`book`**, **`complete_trip`**.  
+8. **Edge cases** — bad dates, late days, unknown id.  
+9. **Complexity** — book insert; complete O(1) with map.  
+10. **Scale / tests** — pricing strategy; adjacent bookings.
 
 ### Natural phrases
 
@@ -44,13 +54,13 @@
 
 ### Mental checklist
 
-Ordinal / half-open · No overlap · APIs · `book` + `complete_trip` · Late fee story · Complexity · Tests.
+Clarified · FR/NFR · APIs before ordinals · `book` + `complete_trip` · Late fee · Tests.
 
 ---
 
-## Interview opener
+## After alignment
 
-> “Cars are rentable in **full-day** blocks. I’ll keep **per-car sorted bookings** to prevent overlap, like meeting rooms. **Trip cost** at return time uses **daily rate × days booked** plus optional **late fee** if returned after agreed end, **fuel / damage** add-ons if they want. I’ll confirm timezone and whether **pickup day counts as day 1**.”
+> “I’ll store intervals as **half-open day ordinals** internally so overlap matches **meeting-room** logic; **complete_trip** computes base + late + extras and **frees** the car.”
 
 ---
 
@@ -63,6 +73,55 @@ Ordinal / half-open · No overlap · APIs · `book` + `complete_trip` · Late fe
 | **Deposit** held? | Payment out of scope often |
 | **Different car classes** pricing? | Strategy pattern |
 | **Cancel** policy? | Refund rules |
+
+---
+
+## FR, NFR, core entities & API (say this for SDE2)
+
+Spend **1–2 minutes** on **calendar / ordinals** and pricing rules; then book + checkout.
+
+### Functional requirements (FR)
+
+- **Register** cars with **daily rate** (and late fee if in scope).
+- **Book** car for **inclusive/exclusive** date range as agreed — **no overlap** on same car.
+- **Complete trip**: compute **total charge** (base days × rate + **late** + extras) and **release** car.
+
+**What you can say:** “**FRs**: book full-day blocks, **checkout** with pricing, no double booking.”
+
+### Non-functional requirements (NFR)
+
+| Area | Typical NFR | One line |
+|------|-------------|----------|
+| **Correctness** | Non-overlap per car; fee matches rules | “**Half-open ordinals** same as meeting rooms.” |
+| **Performance** | Fast book + checkout | “Sorted intervals + **booking_id** map.” |
+| **Extensibility** | Pricing rules change | “Optional **PricingEngine** / strategy.” |
+
+**What you can say:** “**NFRs**: scheduling correctness, clear pricing story, easy to extend rules.”
+
+### Core entities
+
+| Entity | Responsibility |
+|--------|----------------|
+| **`Car`** | id, `daily_rate_cents`, `late_fee_per_day_cents`, … |
+| **`CarRentalService`** | Cars; per-car **sorted bookings**; `booking_id → booking` for checkout. |
+
+**Relationships:** Service **owns** cars; each car **owns** non-overlapping rental intervals.
+
+**What you can say:** “**Entities**: **car** with rates, **service** with schedules and active bookings map.”
+
+### API design
+
+| Method | Purpose |
+|--------|---------|
+| `register_car(car)` | Add fleet member. |
+| `book(booking_id, car_id, user_id, pickup, return_inclusive) -> bool` | Align date semantics with interviewer. |
+| `complete_trip(booking_id, actual_return, extras_cents) -> Optional[int]` | Total charge; remove booking. |
+
+**What you can say:** “**API**: **register**, **book**, **complete_trip**—pricing encapsulated in checkout.”
+
+### Order in the interview
+
+**Clarify → FR / NFR → invariant → entities → API → DS + code** (see **README**).
 
 ---
 

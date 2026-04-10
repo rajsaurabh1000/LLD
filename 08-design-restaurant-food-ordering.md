@@ -4,24 +4,34 @@
 
 ---
 
+## Correct interview flow (this document)
+
+Same order as **README**. Do **not** open with **MenuEntry** / **denormalized aggregates** until **rating rules** and **API surface** are clear.
+
+---
+
 ## Interview script & checklist (human speaking)
 
-### Opening
+### Opening (clarify-first)
 
-“I’ll treat **MenuEntry** as the thing you actually order—a **food name** at a **specific restaurant**—so the same dish name can exist at many places. Ratings attach to an **order**; I’ll roll them up to **restaurant averages** and maintain a **secondary index** for ‘**best restaurants for this food name**.’ I’ll confirm rating scale, **one rating per order**, and whether we **normalize** food names for the index.”
+“What do we support: **restaurants**, **menu items** at a restaurant, **place order**, **rate order**? Is rating **per order** once? **Scale** (1–5)? **Tie-break** for top lists? **Normalize** food names for ‘best for X’? **Double rating** same order?”
+
+**Pause.** Then:
+
+“**Invariant**: **one rating per order**; **aggregates** reflect rolled-up ratings. I’ll do **FR/NFR**, list **APIs** (catalog, order, rate, top queries), **then** add **indexes** for fast leaderboards.”
 
 ### Flow — cover in this order
 
-1. **Clarify** — rate order vs restaurant, double-rating, tie-break, case sensitivity of food names.  
-2. **Invariants** — order rated at most once; aggregates match sum/count of rated orders rolled up.  
-3. **Entities** — restaurant, menu entry, order, running aggregates global + **per (food, restaurant)**.  
-4. **APIs** — `add_restaurant`, `add_menu_entry`, `place_order`, `rate_order`, `top_restaurants(k)`, `top_restaurants_for_food(food, k)`.  
-5. **Data structures** — hash maps; inverted `normalized_food → {restaurant → agg}` updated on rate.  
-6. **Code** — **`rate_order`** (validate + update aggs) and **one top-k** method.  
-7. **Edge cases** — unknown order, wrong restaurant on line items, duplicate rating.  
-8. **Complexity** — rate O(1) updates; top O(R log R) or heap O(R log k).  
-9. **Scale** — async rollup jobs; idempotent `rate_order` with request id; CQRS for reads.  
-10. **Testing** — two restaurants same food; tie on average.
+1. **Open / clarify** — as above + table.  
+2. **FR / NFR** — section below.  
+3. **Invariant** — single rate per order; consistent aggregates.  
+4. **Entities** — restaurant, menu entry, order, service **after** API.  
+5. **APIs on board** — add restaurant/entry, place, rate, top global, top for food.  
+6. **Data structures** — maps + **per-food / per-restaurant** running sums.  
+7. **Code** — **`rate_order`**, **one top-k**.  
+8. **Edge cases** — unknown order, duplicate rate.  
+9. **Complexity** — rate O(1); top O(R log R) sort.  
+10. **Scale / tests** — CQRS; two restaurants same dish.
 
 ### Natural phrases
 
@@ -44,13 +54,13 @@ Place + rate + two query shapes (global vs per food).
 
 ### Mental checklist
 
-MenuEntry indirection · Aggregates · APIs · `rate_order` + top query · Edges · Complexity · Idempotency · Tests.
+Clarified · FR/NFR · APIs before aggregates · `rate_order` + top · Edges · Tests.
 
 ---
 
-## Interview opener
+## After alignment
 
-> “Food items and restaurants are separate catalogs. The same **menu item name** can appear at **multiple restaurants** with different **MenuEntry** ids. Users **place orders** (line items reference a specific restaurant’s entry), then **rate orders**. I’ll aggregate **average rating per restaurant** and support **best restaurant overall** and **best for a given food name**.”
+> “Orderable unit is **MenuEntry** (food at a restaurant). I’ll **denormalize** running averages per restaurant and a **secondary index** keyed by **normalized food name** for ‘best for X’.”
 
 ---
 
@@ -63,6 +73,56 @@ MenuEntry indirection · Aggregates · APIs · `rate_order` + top query · Edges
 | **Weighted** by recency? | v2 |
 | Case sensitivity of food names? | Normalize keys |
 | Need **menu search**? | Out of scope unless asked |
+
+---
+
+## FR, NFR, core entities & API (say this for SDE2)
+
+Spend **1–2 minutes** on **MenuEntry** vs food name; ratings → aggregates.
+
+### Functional requirements (FR)
+
+- **Register** restaurants and **menu entries** (food at a restaurant).
+- **Place order** (line items reference **menu entry** ids at that restaurant).
+- **Rate order** (once); **query** top restaurants globally and **top for a food name**.
+
+**What you can say:** “**FRs**: catalog, order, rate order, **two ranking** queries.”
+
+### Non-functional requirements (NFR)
+
+| Area | Typical NFR | One line |
+|------|-------------|----------|
+| **Correctness** | One rating per order; aggregates consistent | “**Sum/count** updated with each rate.” |
+| **Performance** | Top queries without full order scan | “**Denormalized** restaurant + per-food aggregates.” |
+| **Data quality** | Normalized food key for “same dish” | “**Lowercase / trim** index key.” |
+
+**What you can say:** “**NFRs**: fast leaderboards via **pre-aggregation**.”
+
+### Core entities
+
+| Entity | Responsibility |
+|--------|----------------|
+| **`Restaurant`**, **`MenuEntry`**, **`Order`** | Catalog + order lines + optional rating. |
+| **`FoodOrderingService`** | Stores entities; **running aggregates** per restaurant and per (food, restaurant). |
+
+**Relationships:** Order **references** restaurant + entries; rating **updates** aggregate indexes.
+
+**What you can say:** “**Entities**: **menu entry** is the orderable unit; **service** owns aggregates.”
+
+### API design
+
+| Method | Purpose |
+|--------|---------|
+| `add_restaurant`, `add_menu_entry` | Catalog. |
+| `place_order(order)` | Validate entries belong to restaurant. |
+| `rate_order(order_id, rating)` | Once; roll up stats. |
+| `top_restaurants(k)`, `top_restaurants_for_food(food, k)` | Queries. |
+
+**What you can say:** “**API**: small **write** surface; **two read** patterns for rankings.”
+
+### Order in the interview
+
+**Clarify → FR / NFR → invariant → entities → API → DS + code** (see **README**).
 
 ---
 

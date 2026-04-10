@@ -4,24 +4,34 @@
 
 ---
 
+## Correct interview flow (this document)
+
+Same order as **README**. Do **not** open with **denormalized indexes** or **per-show lock** until **scope**, **FR/NFR**, and **public API** are clear.
+
+---
+
 ## Interview script & checklist (human speaking)
 
-### Opening
+### Opening (clarify-first)
 
-“I’ll separate **catalog** data from **inventory** per show. Users need **discovery** queries—cinemas in a city showing a movie, shows at a cinema for a movie—and **booking**, where the hard part is **no double booking** under concurrency. I’ll ask about **seat identifiers**, whether booking is **all-or-nothing** for a set of seats, and if we need **holds with TTL** or keep scope to immediate commit.”
+“What’s in scope: **add cinema/show**, **discovery** (cinemas in a city for a movie, shows at a cinema for a movie), and **book seats**? How are **seats** identified? Is booking **all-or-nothing** for a set? **Payment / holds with TTL** in scope or out? **Cancel** seats? **Concurrency** expectations?”
+
+**Pause.** Then:
+
+“**Invariant**: a **seat can’t be sold twice** for the same show; **discovery indexes** must stay **consistent** with the catalog. I’ll state **FR/NFR**, write **add/list/book** APIs, **then** decide **indexes** and **locking**.”
 
 ### Flow — cover in this order
 
-1. **Clarify** — seat model, payment/hold out of scope?, cancel, add cinema/show APIs.  
-2. **Invariants** — a seat can’t be sold twice for the same show; indexes stay consistent with catalog.  
-3. **Entities** — `Show` (availability + lock), service with **denormalized indexes** `(city, movie)→cinemas`, `(cinema, movie)→shows`.  
-4. **APIs** — `add_show`, `list_cinemas(city, movie)`, `list_shows(cinema, movie)`, `book(show, seats) -> bool`.  
-5. **Data structures** — `set` of seats per show; inverted indexes for queries.  
-6. **Code** — **`book`** under **per-show lock**; **`add_show`** updating indexes.  
-7. **Edge cases** — partial failure (reject if any seat taken), unknown show, empty seat set.  
-8. **Complexity** — book O(k) seats; listing O(result size).  
-9. **Scale** — show as contention unit; read replicas for listings; idempotent booking token.  
-10. **Testing** — concurrent two buyers, same last seat.
+1. **Open / clarify** — as above + table.  
+2. **FR / NFR** — section below.  
+3. **Invariant** — no double booking; index consistency.  
+4. **Entities** — `Show`, service **after** API.  
+5. **APIs on board** — `add_show`, `list_cinemas`, `list_shows`, `book`.  
+6. **Data structures** — per-show **seat set** + **denormalized** discovery maps.  
+7. **Code** — **`book`**, **`add_show`** (indexes).  
+8. **Edge cases** — partial book failure, unknown show.  
+9. **Complexity** — book O(k); list O(results).  
+10. **Scale / tests** — per-show lock; concurrent last seat.
 
 ### Natural phrases
 
@@ -45,13 +55,13 @@ Discovery APIs + `book(show_id, seats)`.
 
 ### Mental checklist
 
-Indexes + inventory · Invariant on seats · APIs · `book` atomicity · Concurrency story · Tests.
+Clarified · FR/NFR · APIs before indexes · `book` atomicity · Concurrency · Tests.
 
 ---
 
-## Interview opener
+## After alignment
 
-> “I’ll separate **catalog** (cities, cinemas, screens, shows) from **booking** (seat sets per show). Users need: add cinema/show, **list cinemas in a city** showing a movie, **list shows at a cinema** for a movie, and **book seats** atomically without double booking. I’ll confirm seat layout (rows/cols vs seat ids) and whether we need **hold + expiry**.”
+> “I’ll **denormalize** `(city, movie) → cinemas` and `(cinema, movie) → shows` for reads, and keep **available seats** on each **show** with a **lock** for atomic **book**.”
 
 ---
 
@@ -64,6 +74,57 @@ Indexes + inventory · Invariant on seats · APIs · `book` atomicity · Concurr
 | **Refund / cancel**? | Release seats |
 | Same movie **multiple shows** same day? | Show is first-class entity |
 | Pricing in scope? | Often out of scope for LLD |
+
+---
+
+## FR, NFR, core entities & API (say this for SDE2)
+
+Spend **1–2 minutes** on catalog vs inventory; then indexes + atomic **book**.
+
+### Functional requirements (FR)
+
+- **Add** cinema / show (as scoped): register shows with **city**, **cinema**, **movie**, **time**, **seats**.
+- **Discover**: cinemas in a **city** showing a given **movie**; shows at a **cinema** for a **movie**.
+- **Book** one or more **seats** for a **show** — **all-or-nothing** if agreed.
+
+**What you can say:** “**FRs**: catalog + **discovery** queries + **atomic seat booking**.”
+
+### Non-functional requirements (NFR)
+
+| Area | Typical NFR | One line |
+|------|-------------|----------|
+| **Correctness** | No double booking same seat/show | “**Invariant**: seat set mutation is **atomic** under concurrency.” |
+| **Performance** | Fast browse; book bounded by seat count | “**Denormalized indexes** for discovery.” |
+| **Concurrency** | Many users booking same show | “**Lock per show** (or finer) for inventory.” |
+| **Availability** | Idempotent **book** with request id (if they ask) | “Retries shouldn’t double-charge seats.” |
+
+**What you can say:** “**NFRs**: consistency on seats first; scalable reads second.”
+
+### Core entities
+
+| Entity | Responsibility |
+|--------|----------------|
+| **`Show`** | `show_id`, cinema, city, movie, time, **available_seats**; lock for booking. |
+| **`MovieBookingService`** | Registry of shows; **indexes** `(city,movie)→cinemas`, `(cinema,movie)→shows`; `book`. |
+
+**Relationships:** Service **owns** shows and **maintains** query indexes when shows are added.
+
+**What you can say:** “**Entities**: **Show** as inventory unit; **service** owns catalog and indexes.”
+
+### API design
+
+| Method | Purpose |
+|--------|---------|
+| `add_show(...)` | Create show + update indexes. |
+| `list_cinemas(city_id, movie_id)` | Discovery. |
+| `list_shows(cinema_id, movie_id)` | Discovery. |
+| `book(show_id, seats) -> bool` | Atomic reserve if all seats free. |
+
+**What you can say:** “**API**: two **list** paths plus **book**; everything else internal.”
+
+### Order in the interview
+
+**Clarify → FR / NFR → invariant → entities → API → DS + code** (see **README**).
 
 ---
 

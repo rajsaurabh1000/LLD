@@ -4,24 +4,34 @@
 
 ---
 
+## Correct interview flow (this document)
+
+Same order as **README**. Same cadence as **meeting rooms**: **clarify time + overlap + queries** → **FR/NFR → API** → **then** sorted intervals / bisect.
+
+---
+
 ## Interview script & checklist (human speaking)
 
-### Opening
+### Opening (clarify-first)
 
-“This is structurally like **room booking**, but the resource is a **platform** and the thing scheduled is a **train**. I’ll confirm: **only one train per platform at a time**, intervals **half-open** unless you say otherwise, and whether the same train can appear on **two platforms**—if yes, I’d add a **second invariant** on the train side. Core invariant: **no overlapping assignments on the same platform**.”
+“Is it **one train per platform at a time**? How do we represent **time**, and are intervals **half-open** OK for back-to-back assignments? Can the **same train** be scheduled on **two platforms** at once—if yes I need a rule. What **queries** matter—**point in time** only, or ranges? **Cancel/reschedule**? **Concurrency**?”
+
+**Pause.** Then:
+
+“**Invariant**: **no overlapping assignments on the same platform**. I’ll do **FR/NFR**, put **assign** and **query** on the board, **then** use the same **interval** idea as room booking.”
 
 ### Flow — cover in this order
 
-1. **Clarify** — time model, reschedule rules, query types (point-in-time vs range), concurrency.  
-2. **Invariants** — non-overlapping intervals per platform; valid `start < end`.  
-3. **Entities** — station/service, platform → sorted assignments `(start, end, train_id)`.  
-4. **APIs** — `assign(train, platform, start, end) -> bool`, `query_train_at_platform(platform, t) -> optional train`, optional `cancel`.  
-5. **Data structures** — sorted intervals + **bisect** for insert and point query.  
-6. **Code** — **`assign`** (overlap) and **`query_train_at_platform`**.  
-7. **Edge cases** — zero length, boundary `t`, unknown platform.  
-8. **Complexity** — assign O(n) list insert; query O(log n) locate + O(1) check.  
-9. **Scale** — few platforms per station; persistence + audit; optional “train can’t be two places” index.  
-10. **Testing** — adjacent intervals, query inside vs outside.
+1. **Open / clarify** — as above + table.  
+2. **FR / NFR** — section below.  
+3. **Invariant** — exclusive platform use over time; valid ranges.  
+4. **Entities** — manager + per-platform timeline **after** API.  
+5. **APIs on board** — `assign`, `query_train_at_platform`, optional `cancel`.  
+6. **Data structures** — sorted intervals + **bisect** (say **after** API).  
+7. **Code** — **`assign`**, **`query_train_at_platform`**.  
+8. **Edge cases** — zero length, boundary `t`, unknown platform.  
+9. **Complexity** — assign insert cost; query O(log n).  
+10. **Scale / tests** — audit; adjacent intervals.
 
 ### Natural phrases
 
@@ -44,13 +54,13 @@
 
 ### Mental checklist
 
-Same as meeting rooms mentally · Platform exclusivity · Point query · Code · Edges · Complexity.
+Clarified · FR/NFR · APIs before intervals · `assign` + query · Edges · Complexity.
 
 ---
 
-## Interview opener
+## After alignment
 
-> “A **platform** can host **at most one train** at a time. Trains have **arrival and departure** times. I’ll model assignments as **intervals per platform** (like meeting rooms) and support queries: which train is at platform P at time T, and optionally list assignments in a window. I’ll confirm whether times are **half-open** so back-to-back trains are allowed.”
+> “Per platform I’ll keep **non-overlapping intervals sorted by start** and use **binary search** for insert and for ‘who is at P at time t’.”
 
 ---
 
@@ -63,6 +73,56 @@ Same as meeting rooms mentally · Platform exclusivity · Point query · Code ·
 | **Overlap** definition at exact boundaries? | `[arr, dep)` vs closed |
 | Need **conflict detection** if double-book platform? | Core invariant |
 | Query types: point-in-time, range, “free platforms at t”? | Index design |
+
+---
+
+## FR, NFR, core entities & API (say this for SDE2)
+
+Spend **1–2 minutes** naming these; same shape as **meeting rooms**, different nouns.
+
+### Functional requirements (FR)
+
+- **Assign** a **train** to a **platform** for a time range if the platform has **no overlap**.
+- **Query** which train (if any) occupies a platform at **time t**.
+- (Optional) **Cancel** / reschedule assignment.
+
+**What you can say:** “**FRs**: assign train to platform without overlap; **point-in-time query** at minimum.”
+
+### Non-functional requirements (NFR)
+
+| Area | Typical NFR | One line |
+|------|-------------|----------|
+| **Correctness** | At most one train per platform per instant | “Same **non-overlap invariant** as room booking.” |
+| **Performance** | Fast assign + query for modest n per platform | “**Sorted intervals** + **bisect**.” |
+| **Audit / ops** | Who changed what (if they ask) | “Out of core LLD unless required.” |
+
+**What you can say:** “**NFRs**: scheduling correctness, efficient lookup, extensible to persistence.”
+
+### Core entities
+
+| Entity | Responsibility |
+|--------|----------------|
+| **`TrainPlatformManager`** | Fixed platforms; `assign`, `query`, optional `cancel`. |
+| **Per-platform timeline** | Sorted `(start, end, train_id)` intervals. |
+| **`Train`** | Often just **train_id**; optional value object `Assignment`. |
+
+**Relationships:** Manager **owns** platforms; each platform **owns** its interval list.
+
+**What you can say:** “**Entities**: **station service** + **per-platform schedule**; train as id.”
+
+### API design
+
+| Method | Purpose |
+|--------|---------|
+| `assign(train_id, platform_id, start, end) -> bool` | False on conflict or bad input. |
+| `query_train_at_platform(platform_id, t) -> Optional[str]` | Train id or none. |
+| Optional `cancel_assignment(...)` | Lifecycle. |
+
+**What you can say:** “**API**: **assign** and **query** are the core; cancel if in scope.”
+
+### Order in the interview
+
+**Clarify → FR / NFR → invariant → entities → API → DS + code → complexity** (see **README**).
 
 ---
 

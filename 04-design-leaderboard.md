@@ -4,24 +4,34 @@
 
 ---
 
+## Correct interview flow (this document)
+
+Same order as **README**. Do **not** open with “**reverse index**” or “**heap**” until **FR/NFR** and **API** are on the board.
+
+---
+
 ## Interview script & checklist (human speaking)
 
-### Opening
+### Opening (clarify-first)
 
-“Each user has **one team** of players; **user score** is the **sum of current player points**. When a player’s score changes, I need to update **every user who has that player**, so I’ll keep a **reverse index** from player to users—not just forward team membership. For Top-K, I’ll be explicit: I can do a **full sort** for clarity or a **heap** if we optimize for large `U` and small `K`.”
+“Let me confirm the model: **one team per user**? When a **player’s** score changes, is that a **new absolute** value or a **delta**? For **Top-K**, how do we **break ties**—e.g. by `user_id`? Is **K** fixed or per query? Do we need **rank of one user**?”
+
+**Pause.** Then:
+
+“**Invariant**: each **user’s score** equals the **sum** of current scores of players on their team. I’ll state **FR/NFR**, write **register / update / top_k** on the board, **then** decide how to **propagate** player updates and how to answer Top-K.”
 
 ### Flow — cover in this order
 
-1. **Clarify** — one team per user?, points **set vs delta**, tie-break for Top-K, K per query.  
-2. **Invariants** — `user_score[user]` always equals sum of current scores of that user’s players.  
-3. **Entities** — leaderboard service, maps for team, player scores, **player → users**.  
-4. **APIs** — `register_user_team`, `update_player_points`, `top_k`.  
-5. **Data structures** — hash maps + reverse index; Top-K via sort or heap.  
-6. **Code** — **`update_player_points`** (propagate delta) and **`top_k`**.  
-7. **Edge cases** — unknown player, empty leaderboard, ties (break by `user_id`).  
-8. **Complexity** — update O(fans of player); naive Top-K O(U log U).  
-9. **Scale** — shard by user; async materialized leaderboard; approximate Top-K only if they allow.  
-10. **Testing** — one player on many users; overlapping updates.
+1. **Open / clarify** — as above + table.  
+2. **FR / NFR** — section below.  
+3. **Invariant** — denormalized user total matches team sum.  
+4. **Entities** — service + maps (name them **after** API).  
+5. **APIs on board** — `register_user_team`, `update_player_points`, `top_k`.  
+6. **Data structures** — **now** forward + **reverse index** `player → users`; Top-K = sort vs heap (say trade-off).  
+7. **Code** — **`update_player_points`**, **`top_k`**.  
+8. **Edge cases** — unknown player, empty board, ties.  
+9. **Complexity** — update O(fans); Top-K O(U log U) naive.  
+10. **Scale / tests** — sharding, events; one player on many users.
 
 ### Natural phrases
 
@@ -45,13 +55,13 @@
 
 ### Mental checklist
 
-Reverse index · Invariant on totals · APIs · DS · `update` + `top_k` · Edges · Complexity · Sharding/concurrency · Tests.
+Clarified · FR/NFR · APIs before DS · Reverse index + `update` + `top_k` · Edges · Complexity · Tests.
 
 ---
 
-## Interview opener
+## After alignment (DS direction — say after API)
 
-> “Each user has **one team** of players. User score = **sum of current player points**. When a player’s points change, I need to **update every user** who owns that player. For Top-K users, I’ll keep a **heap** or **sorted structure** of scores; with many updates, a **lazy** or **tree map** approach works. In Python I’ll use `heapq` with **lazy deletion** or rescan if K is small.”
+> “I’ll keep a **reverse index** from **player → users** so a player update touches only teams that contain them; Top-K I’ll do with **sort** for clarity or a **heap** if we optimize reads.”
 
 ---
 
@@ -64,6 +74,56 @@ Reverse index · Invariant on totals · APIs · DS · `update` + `top_k` · Edge
 | **Top-K** — ties broken how? | Stable ordering by user_id |
 | K **fixed** or per query? | API |
 | Need **rank of one user**? | Fenwick / order-stat if they ask |
+
+---
+
+## FR, NFR, core entities & API (say this for SDE2)
+
+Spend **1–2 minutes** naming these after clarification; then maps + Top-K.
+
+### Functional requirements (FR)
+
+- **Register** each user’s **team** (set of players).
+- **Update** a **player’s** score (absolute or delta—align with interviewer).
+- **Query Top-K users** by **total team score** (tie-break as agreed).
+
+**What you can say:** “**FRs**: register teams, update player points, return **Top-K users** by summed score.”
+
+### Non-functional requirements (NFR)
+
+| Area | Typical NFR | One line |
+|------|-------------|----------|
+| **Correctness** | User total = sum of current player scores | “**Invariant**: denormalized `user_score` stays in sync.” |
+| **Performance** | Player update must not scan all users | “**Reverse index** `player → users`.” |
+| **Read path** | Top-K acceptable cost | “Sort O(U log U) for interview; heap/tree if hot.” |
+| **Concurrency** | Consistent updates under parallel events | “Lock or partition by user/player.” |
+
+**What you can say:** “**NFRs**: fast fan-out on player update; Top-K trade-off explicit.”
+
+### Core entities
+
+| Entity | Responsibility |
+|--------|----------------|
+| **`Leaderboard`** (service) | Maps: team per user, player scores, **user_score** cache, **player → set(users)**. |
+| **`User` / `Player`** | Often **not** separate classes—IDs in maps are enough unless they want OOP diagrams. |
+
+**Relationships:** Many users **reference** many players; **reverse index** inverts “player on which teams.”
+
+**What you can say:** “**Entities**: one **leaderboard service**; logical **users** and **players** as keyed state.”
+
+### API design
+
+| Method | Purpose |
+|--------|---------|
+| `register_user_team(user_id, player_ids)` | One team per user if that’s the rule. |
+| `update_player_points(player_id, new_points)` | Propagate to all users with that player. |
+| `top_k(k) -> list[(user_id, score)]` | Stable tie-break, e.g. by `user_id`. |
+
+**What you can say:** “**Public API**: register team, update player, **top_k**—internals are maps and indexes.”
+
+### Order in the interview
+
+**Clarify → FR / NFR → invariant → entities → API → DS + code → complexity** (see **README** table).
 
 ---
 

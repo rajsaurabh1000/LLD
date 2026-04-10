@@ -4,24 +4,34 @@
 
 ---
 
+## Correct interview flow (this document)
+
+Same order as **README**. Do **not** open with **deques** / row-major until **nearest policy**, **vehicle types**, and **API** are agreed.
+
+---
+
 ## Interview script & checklist (human speaking)
 
-### Opening
+### Opening (clarify-first)
 
-“I’ll model **floors** and a **grid** of spots, each spot typed for **2W or 4W**. When you say **nearest**, I’ll interpret that as **lowest floor, then row-major order** unless you want a different metric. Invariant: **a spot holds at most one vehicle**; we return a **ticket** so `unpark` is O(1) lookup.”
+“How many **floors** and layout—**rows/cols**? **2W vs 4W** spot types—can a 2W use a 4W spot? What does **nearest** mean—**lowest floor then row-major**, or something else? **Full lot**—return failure? **Concurrent** parking? **Ticket** model for **unpark**?”
+
+**Pause.** Then:
+
+“**Invariant**: **at most one vehicle per spot**; **ticket** identifies an active park. I’ll do **FR/NFR**, **`park` / `unpark`** on the board, **then** pick **free lists** and allocation order.”
 
 ### Flow — cover in this order
 
-1. **Clarify** — nearest rule, vehicle types, full lot behavior, concurrent park.  
-2. **Invariants** — one occupant per spot; ticket maps to exactly one spot.  
-3. **Entities** — lot, `SpotId`, free **deques** per policy, ticket store.  
-4. **APIs** — `park(vehicle_kind) -> Optional[Ticket]`, `unpark(ticket_id) -> bool`.  
-5. **Data structures** — **deque per floor** (or per floor+kind) pre-filled in scan order; map `spot → kind` for returning to correct free pool.  
-6. **Code** — **`park`** and **`unpark`**.  
-7. **Edge cases** — full lot, wrong ticket, double unpark.  
-8. **Complexity** — O(1) park/unpark with pre-bucketed free lists.  
-9. **Scale** — **per-floor locks**; striping if needed.  
-10. **Testing** — fill and fail; unpark frees correct type queue.
+1. **Open / clarify** — as above + table.  
+2. **FR / NFR** — section below.  
+3. **Invariant** — one occupant; valid ticket.  
+4. **Entities** — lot, spots, tickets **after** API.  
+5. **APIs on board** — `park`, `unpark`.  
+6. **Data structures** — **deques** / queues in **nearest** order; `spot → kind`.  
+7. **Code** — **`park`**, **`unpark`**.  
+8. **Edge cases** — full lot, bad ticket.  
+9. **Complexity** — O(1) with pre-bucketed free lists.  
+10. **Scale / tests** — per-floor lock; fill/unpark.
 
 ### Natural phrases
 
@@ -44,13 +54,13 @@
 
 ### Mental checklist
 
-Nearest policy · Two deques or queues · Ticket map · Code · Full lot · Concurrency · Tests.
+Clarified · FR/NFR · APIs before deques · `park` / `unpark` · Full lot · Concurrency · Tests.
 
 ---
 
-## Interview opener
+## After alignment
 
-> “I’ll model a **parking lot** with floors; each floor has spots in a **row × col** grid. Spots are typed for **two-wheeler** or **four-wheeler**. `park(vehicle)` finds the **nearest** available compatible spot—I'll define nearest as **lowest floor, then row, then column** unless they want a different distance metric. `unpark` frees by **ticket id**.”
+> “I’ll precompute **free spots per floor and vehicle kind** in **row-major** order in **deques** so `park` is **pop front**; **unpark** pushes back using **spot kind**.”
 
 ---
 
@@ -63,6 +73,55 @@ Nearest policy · Two deques or queues · Ticket map · Code · Full lot · Conc
 | **Full** behavior — queue vs reject? | API |
 | One vehicle per spot? | Yes typically |
 | **Concurrency** | Lock lot or striping |
+
+---
+
+## FR, NFR, core entities & API (say this for SDE2)
+
+Spend **1–2 minutes** on policy (**nearest**), vehicle types, then allocation DS.
+
+### Functional requirements (FR)
+
+- **Park** a **2W or 4W** vehicle on a **compatible** free spot; return a **ticket** if success.
+- **Unpark** by **ticket**, freeing the spot.
+- (Optional) **Query** availability / spot type.
+
+**What you can say:** “**FRs**: **park** with right spot type, **unpark** by ticket, deterministic **nearest** rule.”
+
+### Non-functional requirements (NFR)
+
+| Area | Typical NFR | One line |
+|------|-------------|----------|
+| **Correctness** | At most one vehicle per spot; valid ticket only | “Ticket maps **one-to-one** to occupied spot.” |
+| **Performance** | O(1) park/unpark with pre-bucketed free lists | “**Deques** in row-major order.” |
+| **Concurrency** | No double assign same spot | “**Lot or per-floor lock**.” |
+| **Fairness** | Nearest-first policy explicit | “We **precompute** order in free queues.” |
+
+**What you can say:** “**NFRs**: fast allocation, no double park, clear fairness rule.”
+
+### Core entities
+
+| Entity | Responsibility |
+|--------|----------------|
+| **`ParkingLot`** | Floors, grid, **free deques** per policy, **ticket → spot**, **spot → kind**. |
+| **`Ticket` / `SpotId`** | Value types returned or used internally. |
+
+**Relationships:** Lot **owns** all spots; tickets **reference** spots during occupancy.
+
+**What you can say:** “**Entities**: one **lot**; **spots** and **tickets** as ids/records.”
+
+### API design
+
+| Method | Purpose |
+|--------|---------|
+| `park(vehicle_kind) -> Optional[Ticket]` | Fail if no spot. |
+| `unpark(ticket_id) -> bool` | False if unknown or invalid. |
+
+**What you can say:** “**Public API** is **park** / **unpark**; layout built at construction.”
+
+### Order in the interview
+
+**Clarify → FR / NFR → invariant → entities → API → DS + code** (see **README**).
 
 ---
 

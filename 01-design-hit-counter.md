@@ -4,9 +4,34 @@
 
 ---
 
-## How to open the interview (30 seconds)
+## Correct interview flow (this document)
 
-> “I’ll model this as a service that records hits **per page** and answers **how many hits in the last N minutes** (or last 5 minutes if fixed). I’ll use a **fixed-size time bucket** structure per page so we don’t store every event, and I’ll ask whether we need thread safety and what time resolution we should use.”
+Same **order** as **README** (full table there): **open with questions** → **clarifying table** → **FR / NFR / entities / API** → **approaches & core design** → **code** → **complexity & follow-ups**.  
+This file maps: **How to open** (step 1) · **Clarifying questions** (step 2) · **FR, NFR…** (steps 3–6) · **Requirements → Approaches → Core design → Reference code** (steps 7–8) · **Complexity / optimizations / follow-ups** (steps 9–11).
+
+---
+
+## How to open the interview (first 30 seconds)
+
+**Why not lead with “I’ll use time buckets”?** If you open with a specific implementation, you sound like you **skipped alignment** and you may be wrong (global vs per page, window length, second vs minute). Interviewers often want **you to drive clarification first**; the DS comes **after** you both agree on scope.
+
+### Stronger opener (clarify-first — use this default)
+
+> “I want to make sure I build the right thing. Are we counting **per page** or **one global** counter? Is the window **fixed**—say five minutes—or **configurable**? And should I assume **multi-threaded** callers, or single-threaded for now? I’ll also want to know if I can **inject time** for tests.”
+
+**Pause.** Let them answer.
+
+Optional one-line **intent without picking buckets yet**:
+
+> “Once that’s clear, I’ll state the **invariant** for the query: counts should only reflect hits **inside** the sliding window relative to `now`—then I’ll talk **API**, then **data structures**.”
+
+### After alignment (~15 seconds later) — now you may name direction
+
+Only **after** they confirm scope, say something like:
+
+> “Given **per-page** counts and a **bounded** window, I’m going to aim for **memory that doesn’t grow with total hits**—I’ll start from a naive approach and then move to **time buckets** or a ring buffer if that matches the window granularity we agreed on.”
+
+That order (**clarify → FR/NFR → API → then buckets**) matches **Order in the interview** in the FR section below.
 
 ---
 
@@ -78,7 +103,7 @@ Put **method signatures** on the board before you code. Keep the surface **small
 
 ### Order in the interview (quick mnemonic)
 
-**Clarify → FR / NFR (short) → entities → API on board → data structure + code → complexity.**
+Matches **README** table: **Clarify → FR / NFR → invariant → entities → API → data structure (+ naive if you want) → code → edges + complexity → scale/tests → close.**
 
 ---
 

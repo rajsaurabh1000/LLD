@@ -4,24 +4,34 @@
 
 ---
 
+## Correct interview flow (this document)
+
+Same order as **README**. Do **not** open with **Command pattern** / **two stacks** until **document rules** (rows, no `\n`, delete semantics) are clear.
+
+---
+
 ## Interview script & checklist (human speaking)
 
-### Opening
+### Opening (clarify-first)
 
-“The document is **rows of strings** with **no embedded newlines**. I’ll use the **Command pattern**: each edit knows how to **apply** and **undo** itself. **Undo** and **redo** are two stacks; after a new edit, I **clear redo**—that’s standard editor behavior. I’ll confirm delete **clamps** past end-of-line vs throws, and that indices are **0-based** as in the spec.”
+“Document is **rows** of strings—**no newlines inside** a cell? **0-based** row/col? If **delete** goes past end of line—**clamp** or **error**? Is a **cursor** in scope or only explicit ops? **Undo/redo**—unbounded stacks OK?”
+
+**Pause.** Then:
+
+“**Invariant**: **undo** truly reverses **apply**; **new edit clears redo**. I’ll state **FR/NFR**, write **insert/delete/undo/redo** on the board, **then** use **commands** and **two stacks**.”
 
 ### Flow — cover in this order
 
-1. **Clarify** — Unicode code points vs bytes (Python `str`), clamping rules, cursor in scope or not.  
-2. **Invariants** — after any operation, `lines` is a list of strings with no `\n`; undo restores prior state.  
-3. **Entities** — `DocumentState`, `Command` interface, `TextEditor` with stacks.  
-4. **APIs** — `insert(row, col, text)`, `delete(row, col, length)`, `undo()`, `redo()`.  
-5. **Data structures** — `list[str]`; **two stacks** of commands.  
-6. **Code** — **`InsertCommand` / `DeleteCommand`** (or inline) + **`undo`/`redo`**.  
-7. **Edge cases** — out-of-range row/col, delete length 0, undo empty.  
-8. **Complexity** — O(len) string splice per op on a line; rope if huge lines.  
-9. **Scale** — usually local; mention **operation log** for persistence if asked.  
-10. **Testing** — insert then undo; delete capture for redo path.
+1. **Open / clarify** — as above + table.  
+2. **FR / NFR** — section below.  
+3. **Invariant** — reversible edits; redo cleared on new edit.  
+4. **Entities** — document, commands, editor **after** API.  
+5. **APIs on board** — `insert`, `delete`, `undo`, `redo`.  
+6. **Data structures** — `list[str]` + **undo/redo stacks** of commands.  
+7. **Code** — **insert/delete** + **undo/redo**.  
+8. **Edge cases** — OOR index, empty undo.  
+9. **Complexity** — O(len) splice per line.  
+10. **Scale / tests** — rope if huge; undo chain test.
 
 ### Natural phrases
 
@@ -44,13 +54,13 @@
 
 ### Mental checklist
 
-Command pattern · Two stacks · Clear redo on edit · APIs · Code · Edges · Complexity · Tests.
+Clarified · FR/NFR · APIs before Command pattern · Two stacks · Code · Tests.
 
 ---
 
-## Interview opener
+## After alignment
 
-> “The document is **list of lines** (strings without embedded newlines). Operations are **per row**: insert characters at column, delete a run of columns. I’ll use the **Command pattern** with **undo** and **redo** stacks; each command implements `execute` and `undo` mutating the document. I’ll confirm whether **cursor** is in scope or only operations given explicitly.”
+> “Each edit is a **command** with **apply** and **revert**; **undo** and **redo** stacks; **new mutation clears redo**.”
 
 ---
 
@@ -63,6 +73,55 @@ Command pattern · Two stacks · Clear redo on edit · APIs · Code · Edges · 
 | Max rows / line length? | Memory |
 | Undo across **no-ops**? | Stack policy |
 | **Batch** macro undo? | Optional `CompositeCommand` |
+
+---
+
+## FR, NFR, core entities & API (say this for SDE2)
+
+Spend **1–2 minutes** on **command pattern** and stack rules; then implement.
+
+### Functional requirements (FR)
+
+- **Insert** text at **(row, col)** on one line (no `\n` in inserted text if that’s the rule).
+- **Delete** **length** characters at **(row, col)**.
+- **Undo** last applied edit; **redo** last undone edit; **new edit clears redo**.
+
+**What you can say:** “**FRs**: per-row insert/delete plus **undo/redo** with standard stack semantics.”
+
+### Non-functional requirements (NFR)
+
+| Area | Typical NFR | One line |
+|------|-------------|----------|
+| **Correctness** | Document always valid rows; undo truly reverses | “Each command implements **apply** and **revert**.” |
+| **Performance** | String ops O(length) per line | “**Rope** only if they care about huge lines.” |
+| **Memory** | Bounded undo depth (if they ask) | “Optional cap on stack size.” |
+
+**What you can say:** “**NFRs**: reversible edits, honest cost of string concat.”
+
+### Core entities
+
+| Entity | Responsibility |
+|--------|----------------|
+| **`DocumentState`** | `list[str]` lines. |
+| **`Command`** (ABC) | `apply(doc)`, `revert(doc)` — `InsertCommand`, `DeleteCommand`. |
+| **`TextEditor`** | Holds doc + **undo** / **redo** stacks. |
+
+**Relationships:** Editor **applies** commands to document; stacks **store** command history.
+
+**What you can say:** “**Entities**: **document**, **command** objects, **editor** with two stacks.”
+
+### API design
+
+| Method | Purpose |
+|--------|---------|
+| `insert(row, col, text)`, `delete(row, col, length)` | Mutations (push undo, clear redo). |
+| `undo() -> bool`, `redo() -> bool` | Return false if nothing to do. |
+
+**What you can say:** “**Public API** is four operations; commands stay **internal**.”
+
+### Order in the interview
+
+**Clarify → FR / NFR → invariant → entities → API → DS + code** (see **README**).
 
 ---
 

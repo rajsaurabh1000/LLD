@@ -4,24 +4,34 @@
 
 ---
 
+## Correct interview flow (this document)
+
+Same order as **README**. Do **not** open with “I’ll use a **tree**…” until **after** wildcard and path rules are agreed; then **FR/NFR → API →** choose tree + parent pointers.
+
+---
+
 ## Interview script & checklist (human speaking)
 
-### Opening
+### Opening (clarify-first)
 
-“I’ll model directories as a **tree** with parent pointers so `pwd` is cheap. For `cd`, I need one clarification: is `*` **one path segment** matching **any single child name**, and if **multiple** matches exist, should we **fail**, pick **deterministically**, or **try all**? I’ll assume we need **correct resolution** and I’ll make ambiguity behavior explicit.”
+“We’re building **mkdir**, **pwd**, **cd** with a special `*` segment. Before I choose a representation: is `*` exactly **one path segment** matching **one** child name? If several children could match, do we **fail**, pick **deterministically**, or **search**? How does **`..`** behave at **root**? Should **mkdir** create **intermediate** dirs (`mkdir -p`)? **Only directories**—no files?”
+
+**Pause.** Then:
+
+“**Invariant**: **`cwd` always points to a valid directory**. Next I’ll do **FR/NFR**, put the **three commands** on the board, **then** I’ll use a **tree** with **parent pointers** for `pwd` and segment resolution for `cd`.”
 
 ### Flow — cover in this order
 
-1. **Clarify** — `*` semantics, `..` at root, absolute vs relative, `mkdir -p` style or not.  
-2. **Invariants** — `cwd` always points to a valid node; children names unique per directory.  
-3. **Entities** — `DirNode`, shell with `root` + `cwd`.  
-4. **APIs** — `mkdir(path)`, `pwd() -> str`, `cd(path) -> bool`.  
-5. **Data structures** — tree + `dict` children + **parent** pointer for `pwd`.  
-6. **Code** — **`mkdir`** (walk/create), **`cd`** with tokenization + **backtracking** on `*`.  
-7. **Edge cases** — empty path, only `/`, ambiguous wildcard, missing segment.  
-8. **Complexity** — `pwd` O(depth); worst-case `cd` exponential in wildcards—say it honestly.  
-9. **Scale** — usually in-memory LLD; mention path cache invalidation only if they extend.  
-10. **Testing** — `..`, `/a/b`, unique vs ambiguous `*`.
+1. **Open / clarify** — as above + **Clarifying questions** table.  
+2. **FR / NFR** — section below.  
+3. **Invariant** — valid `cwd`; deterministic `*` if required.  
+4. **Entities** — `DirNode`, shell (`root`, `cwd`) **after** API.  
+5. **APIs on board** — `mkdir`, `pwd`, `cd`.  
+6. **Data structures** — **now** tree + `dict` children + **parent** for `pwd`.  
+7. **Code** — **`mkdir`**, **`cd`** (`*` backtracking), **`pwd`**.  
+8. **Edge cases** — empty path, `/`, ambiguous `*`, missing segment.  
+9. **Complexity** — `pwd` O(depth); honest cost for `*`.  
+10. **Scale / tests** — in-memory; `..`, `/a/b`, `*`.
 
 ### Natural phrases
 
@@ -45,13 +55,13 @@
 
 ### Mental checklist
 
-Wildcard semantics agreed · Tree + parent · APIs · `mkdir` / `cd` / `pwd` · Edges · Complexity · Tests.
+Wildcard agreed · FR/NFR · APIs before tree · Tree + `mkdir` / `cd` / `pwd` · Edges · Complexity · Tests.
 
 ---
 
-## Interview opener
+## After alignment (before coding — structure teaser)
 
-> “I’ll model directories as a **tree** of nodes; each node has a name and children map. `pwd` tracks the **current node** from root. `mkdir` creates missing segments. For `cd`, I’ll parse absolute vs relative paths; the only special piece is `*` as a **segment wildcard** matching **exactly one** child name—I’ll confirm whether `*` can match multiple characters across segments or only ‘any single directory name’ in one segment.”
+> “I’ll represent dirs as a **tree** with **parent pointers** so `pwd` walks up to root; children in a **map** for fast lookup by segment.”
 
 ---
 
@@ -63,6 +73,55 @@ Wildcard semantics agreed · Tree + parent · APIs · `mkdir` / `cd` / `pwd` · 
 | Multiple matches — **error**, **first**, or **all**? | Usually deterministic pick or fail |
 | Only directories? | Yes for `cd` |
 | Root path `/` behavior | Parent of root stays root or error |
+
+---
+
+## FR, NFR, core entities & API (say this for SDE2)
+
+Spend **1–2 minutes** naming these after clarification; then tree + path logic.
+
+### Functional requirements (FR)
+
+- **`mkdir`** — create directory path (create parents as agreed, e.g. `mkdir -p` style).
+- **`pwd`** — print absolute path of current working directory.
+- **`cd`** — change cwd; support `.`, `..`, absolute/relative paths, and segment **`*`** per spec.
+
+**What you can say:** “**FRs**: **mkdir**, **pwd**, **cd** with the wildcard rules we just aligned on.”
+
+### Non-functional requirements (NFR)
+
+| Area | Typical NFR | One line |
+|------|-------------|----------|
+| **Correctness** | `cwd` always valid; paths resolve deterministically | “**Invariant**: cwd is always a real node; `*` behavior is **defined**.” |
+| **Performance** | `pwd` and single-segment `cd` cheap | “Tree walk is **O(depth)**; worst-case `*` is branchy—I’ll say that.” |
+| **Memory** | In-memory tree only | “No disk; children in a **map** per node.” |
+
+**What you can say:** “**NFRs**: correct resolution, predictable cost for normal paths, honest complexity for wildcards.”
+
+### Core entities
+
+| Entity | Responsibility |
+|--------|----------------|
+| **`DirNode`** | `name`, `parent`, `children: dict[str, DirNode]`. |
+| **`FileSystemShell`** | `root`, `cwd`; implements `mkdir` / `pwd` / `cd`. |
+
+**Relationships:** Shell **references** root and cwd; nodes form a **tree** via parent + children.
+
+**What you can say:** “**Entities**: **directory nodes** in a tree, plus a **shell** that tracks cwd.”
+
+### API design
+
+| Method | Purpose |
+|--------|---------|
+| `mkdir(path: str) -> None` | Create path. |
+| `pwd() -> str` | Return `/` or `/a/b/...`. |
+| `cd(path: str) -> bool` | Return **False** if path invalid / ambiguous per spec. |
+
+**What you can say:** “**Public API** is exactly the three commands; path parsing stays **private**.”
+
+### Order in the interview
+
+**Clarify → FR / NFR → invariant → entities → API → tree + implementation** (same as **README** table).
 
 ---
 

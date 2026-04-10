@@ -4,24 +4,35 @@
 
 ---
 
+## Correct interview flow (this document)
+
+Same order as **README** (master table): **questions → clarifying table → FR/NFR → invariant → entities → API → data structures → code → edges/complexity → scale/tests → close**.  
+Do **not** open with “sorted list + bisect” until **after** you’ve stated **FR/NFR** and **API** (sections below).
+
+---
+
 ## Interview script & checklist (human speaking)
 
-### Opening
+### Opening (clarify-first — first 30–45 seconds)
 
-“I’ll treat this as a **fixed set of rooms**. Before I code, I want to align on **interval semantics**—I’ll use **half-open** `[start, end)` so back-to-back meetings don’t count as overlap unless you prefer otherwise. I’ll also confirm **who generates `booking_id`** and whether **cancel** is by id only. My invariant: **two bookings in the same room never overlap in time**.”
+“Before I pick a structure: is the **room list fixed** up front? How should we represent **time** (epoch, minutes, dates)? For **overlap**, I’d like **half-open** `[start, end)` so back-to-back slots don’t conflict—is that OK, or do you want **closed** intervals? How does **cancel** work—by **`booking_id`** only? **Who generates** the booking id? Any need to **list** bookings per room? **Multi-threaded**?”
+
+**Pause.** Then one line of intent (still **no** sorted list yet):
+
+“Once aligned, my **invariant** is: **no two bookings in the same room overlap in time**. Next I’ll state **FR/NFR**, put **book/cancel** on the board, **then** choose how to store intervals.”
 
 ### Flow — cover in this order
 
-1. **Clarify** — time type, half-open vs closed, cancel API, list bookings?, concurrency.  
-2. **Invariants** — no overlapping intervals per room; invalid ranges rejected.  
-3. **Entities** — `Scheduler` (or `BookingService`), per-room sorted bookings.  
-4. **APIs** — `book(room_id, start, end, booking_id) -> bool`, `cancel(room_id, booking_id) -> bool`.  
-5. **Data structures** — **sorted list by start** + binary search for neighbors; optional map id → room for fast cancel.  
-6. **Code** — **`book`** (overlap check + insert) and **`cancel`**.  
-7. **Edge cases** — `end <= start`, duplicate id, boundary touch with half-open.  
-8. **Complexity** — “Find position O(log n), list insert O(n)—honest; tree if they need strict log n.”  
-9. **Scale** — room as natural shard; DB unique constraint; optimistic locking.  
-10. **Testing** — adjacent intervals, contained interval, duplicate book.
+1. **Open / clarify** — as above; use **Clarifying questions** table.  
+2. **FR / NFR** — **FR, NFR, core entities & API** section (say aloud, 1–2 min).  
+3. **Invariant** — no overlap per room; reject invalid ranges.  
+4. **Entities** — scheduler + per-room schedule (on board **after** API names).  
+5. **APIs on the board** — `book`, `cancel` (signatures **before** internal DS).  
+6. **Data structures** — **now** justify: naive scan vs **sorted by start** + neighbor check + `bisect`; optional `booking_id → room`.  
+7. **Code** — **`book`**, **`cancel`**.  
+8. **Edge cases** — `end <= start`, duplicate id, boundary touch with half-open.  
+9. **Complexity** — find O(log n), list insert O(n)—honest; tree if they need strict log n.  
+10. **Scale / concurrency / testing** — room shard, DB constraint, locks; adjacent intervals in tests.
 
 ### Natural phrases
 
@@ -45,13 +56,15 @@
 
 ### Mental checklist
 
-Clarified · Invariant (no overlap) · Entities · APIs · DS · `book` + `cancel` coded · Edges · Complexity · Concurrency/DB · Tests.
+Clarified · FR/NFR · Invariant · Entities · APIs **before** DS · DS + `book` + `cancel` · Edges · Complexity · Concurrency/DB · Tests.
 
 ---
 
-## Interview opener
+## After alignment (optional — you may say this before DS)
 
-> “I’ll keep a **fixed set of rooms**. Each room holds a **sorted list of bookings** by start time. Booking succeeds only if the new interval **doesn’t overlap** any existing one in that room. I’ll confirm interval semantics—**half-open** `[start, end)` is easiest for adjacency (`end == other.start` allowed).”
+> “I’ll keep bookings **per room** in **start order** so overlap checks only need **neighbors** at insert time—I'll use binary search to find the slot.”
+
+(Only **after** steps 1–5 above; this is **not** your first sentence.)
 
 ---
 
@@ -65,6 +78,56 @@ Clarified · Invariant (no overlap) · Entities · APIs · DS · `book` + `cance
 | **Cancel** — by id only, or by interval? | Lookup structure |
 | **List bookings** for a room? | Extra API |
 | **Concurrency** | Lock per room vs global |
+
+---
+
+## FR, NFR, core entities & API (say this for SDE2)
+
+Spend **1–2 minutes** naming these after clarification; then data structures and code.
+
+### Functional requirements (FR)
+
+- **Book** a time range for a given **room** if it does not **overlap** existing bookings in that room.
+- **Cancel** an existing booking (by **booking_id** and room, or as agreed).
+- (Optional if in scope) **List** bookings for a room.
+
+**What you can say:** “**FRs**: book and cancel with **no overlap per room**; I’ll confirm list/cancel shape.”
+
+### Non-functional requirements (NFR)
+
+| Area | Typical NFR | One line |
+|------|-------------|----------|
+| **Correctness** | No double-book same room/time | “**Invariant**: intervals for one room never overlap.” |
+| **Performance** | Fast book/cancel for typical n per room | “I’ll use **sorted intervals** and only check **neighbors**.” |
+| **Concurrency** | Safe parallel books | “**Per-room lock** or start single-threaded.” |
+| **Consistency** | `booking_id` unique / idempotent retries | “Same `booking_id` retry shouldn’t double-insert.” |
+
+**What you can say:** “**NFRs**: correctness first, predictable book/cancel, thread safety if needed.”
+
+### Core entities
+
+| Entity | Responsibility |
+|--------|----------------|
+| **`MeetingRoomScheduler`** (or `BookingService`) | Known rooms; `book` / `cancel`; owns per-room state. |
+| **Per-room schedule** | Sorted list of `(start, end, booking_id)`—no separate `Booking` class required in interview code. |
+
+**Relationships:** Scheduler **owns** many rooms; each room **owns** a non-overlapping set of intervals.
+
+**What you can say:** “**Entities**: one **scheduler**, each **room** holds an ordered list of bookings.”
+
+### API design
+
+| Method | Purpose |
+|--------|---------|
+| `book(room_id, start, end, booking_id) -> bool` | Success only if no overlap and valid range. |
+| `cancel(room_id, booking_id) -> bool` | Remove if present. |
+| Optional `list_bookings(room_id)` | Read model / debug. |
+
+**What you can say:** “**Public API** stays small: **book** and **cancel**; overlap is enforced inside.”
+
+### Order in the interview
+
+**Clarify → FR / NFR → invariant → entities → API → DS + code → complexity** (see **README** master table).
 
 ---
 
