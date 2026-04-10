@@ -57,6 +57,100 @@ Clarified · Invariants · Entities · APIs · DS + why · Code (2–3) · Edges
 
 ---
 
+## Elite human-driven script (full narrative)
+
+Use this when you want a **slower, senior cadence**: you take the room, show trade-off thinking, narrate while coding, and check in with the interviewer. Same facts as above—just **more dialogue**.
+
+### 1. Opening — take control
+
+“Before I jump into design, let me **quickly clarify** a couple of things so we align on expectations.”
+
+**Pause** — let them answer.
+
+Then:
+
+“Are we tracking hits **per page** or **globally**? Is the window **fixed** at five minutes or **configurable**? And should I assume **multi-threaded** callers, or start **single-threaded** and add locking if you want?”
+
+(Optional add-on:) “For tests, is it okay if I **inject `now`** instead of only using wall clock?”
+
+### 2. Set direction — show ownership
+
+After they respond, **lock the scope** in one sentence:
+
+“Great — I’ll design this as a **per-page** hit counter with a **sliding** time window. My goal is to keep **both** operations efficient and **memory bounded**.”
+
+That signals intent without jumping to code.
+
+### 3. Thought process — don’t jump straight to buckets
+
+“Let me start with a **naive** approach first.”
+
+**Brute force (say it, then reject it):**
+
+“We could **store every timestamp** and on each query **filter** to the last N minutes.”
+
+**Pause**, then:
+
+“That doesn’t scale for what we care about: **query** becomes O(number of hits) and **memory** grows with traffic. So I want to **aggregate** instead of retaining every event.”
+
+### 4. Transition — confident pivot
+
+“So I’ll optimize by **aggregating into fixed-size time buckets**. Concretely, I’ll use **one-minute buckets** and a **circular buffer** so we **reuse** a fixed number of slots instead of growing without bound.”
+
+**Winning line (memory story):**
+
+“Instead of storing every hit, I only store **counts per minute** for the last *W* minutes.”
+
+### 5. Why this (interviewers like the “because”)
+
+“This gives us **bounded memory** per page—O(window), not O(hits)—**O(1)** work per `record_hit` for updating one bucket, and **predictable** performance for the hot path.”
+
+If they push on query cost: “`get_hits` sums at most **W** buckets, so it’s **O(window)**; with a **fixed** window that’s **constant** in big-O terms relative to traffic.”
+
+### 6. Structure — two-part design
+
+“I’ll split it into **two** pieces: a **page-level** counter that owns the ring buffer, and a **service** that maps `page_id` to that counter so callers have one entry point.”
+
+### 7. While coding — narrate out loud
+
+Start with:
+
+“I’ll start with the **page-level** counter.”
+
+As you write, short **running commentary** (don’t read every line):
+
+| What you’re writing | What you can say |
+|---------------------|------------------|
+| Arrays for counts + minute labels | “I’m storing **hit counts** and the **calendar minute** each slot represents, so I know what’s stale.” |
+| `current_minute = floor(now / 60)` | “I normalize time to **minute granularity** for the bucket key.” |
+| Index `minute % window` | “I map the minute into the ring with **modulo** so I reuse the same array.” |
+| Reset stale bucket | “If this slot is for an **old** minute, I **reset** it before I add new hits.” |
+| Increment | “Then I **increment** the count for **this** minute.” |
+| Query loop | “On query I **sum only** buckets whose minute falls **inside** the window relative to `now`.” |
+
+### 8. Keep the interviewer engaged (senior signal)
+
+Occasionally:
+
+“Does this approach make sense so far?”  
+“Would you like me to go **deeper** on expiry, or move to the **service** layer?”
+
+Use **sparingly**—two check-ins per phase is enough.
+
+### 9. Edge cases — proactive
+
+“Let me quickly call out **edge cases**: **new page**—I’ll use a map or `defaultdict` so the counter appears on first hit; **window of one**—still works; **very old** timestamps—those buckets are **outside** the window and won’t be counted. If **clock goes backward**, I’d align with you on whether we **ignore** or **still accept** hits.”
+
+### 10. Complexity — short and confident
+
+“**Update** is O(1) for touching one bucket. **Query** is O(window)—and with a **fixed** window size, that’s **constant** relative to traffic volume.”
+
+### 11. Tie-back to threading (if they asked)
+
+“If we’re multi-threaded, I’d **lock per page** rather than one global lock so different pages don’t contend.”
+
+---
+
 ## How to open the interview (30 seconds)
 
 > “I’ll model this as a service that records hits **per page** and answers **how many hits in the last N minutes** (or last 5 minutes if fixed). I’ll use a **fixed-size time bucket** structure per page so we don’t store every event, and I’ll ask whether we need thread safety and what time resolution we should use.”
