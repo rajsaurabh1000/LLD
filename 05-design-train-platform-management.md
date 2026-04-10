@@ -4,6 +4,50 @@
 
 ---
 
+## Interview script & checklist (human speaking)
+
+### Opening
+
+“This is structurally like **room booking**, but the resource is a **platform** and the thing scheduled is a **train**. I’ll confirm: **only one train per platform at a time**, intervals **half-open** unless you say otherwise, and whether the same train can appear on **two platforms**—if yes, I’d add a **second invariant** on the train side. Core invariant: **no overlapping assignments on the same platform**.”
+
+### Flow — cover in this order
+
+1. **Clarify** — time model, reschedule rules, query types (point-in-time vs range), concurrency.  
+2. **Invariants** — non-overlapping intervals per platform; valid `start < end`.  
+3. **Entities** — station/service, platform → sorted assignments `(start, end, train_id)`.  
+4. **APIs** — `assign(train, platform, start, end) -> bool`, `query_train_at_platform(platform, t) -> optional train`, optional `cancel`.  
+5. **Data structures** — sorted intervals + **bisect** for insert and point query.  
+6. **Code** — **`assign`** (overlap) and **`query_train_at_platform`**.  
+7. **Edge cases** — zero length, boundary `t`, unknown platform.  
+8. **Complexity** — assign O(n) list insert; query O(log n) locate + O(1) check.  
+9. **Scale** — few platforms per station; persistence + audit; optional “train can’t be two places” index.  
+10. **Testing** — adjacent intervals, query inside vs outside.
+
+### Natural phrases
+
+- “I’ll reuse the **two-neighbor overlap check** from meeting rooms—it’s the same math.”  
+- “For ‘**who is at platform P at time t**’, I need the **last interval with start ≤ t** and then check **t < end** for half-open.”
+
+### APIs on the board
+
+`assign` · `query_train_at_platform` · optional `cancel_assignment`.
+
+### Must-code (2–3)
+
+1. **`assign`**  
+2. **`query_train_at_platform`**  
+3. Optional **`cancel`** if they care about lifecycle.
+
+### Closing
+
+“For **extensibility**, I’d introduce `TimeRange` and `Assignment` types and keep persistence behind an interface—same domain rules, swappable storage.”
+
+### Mental checklist
+
+Same as meeting rooms mentally · Platform exclusivity · Point query · Code · Edges · Complexity.
+
+---
+
 ## Interview opener
 
 > “A **platform** can host **at most one train** at a time. Trains have **arrival and departure** times. I’ll model assignments as **intervals per platform** (like meeting rooms) and support queries: which train is at platform P at time T, and optionally list assignments in a window. I’ll confirm whether times are **half-open** so back-to-back trains are allowed.”

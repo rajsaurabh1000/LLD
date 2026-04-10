@@ -4,6 +4,50 @@
 
 ---
 
+## Interview script & checklist (human speaking)
+
+### Opening
+
+“The document is **rows of strings** with **no embedded newlines**. I’ll use the **Command pattern**: each edit knows how to **apply** and **undo** itself. **Undo** and **redo** are two stacks; after a new edit, I **clear redo**—that’s standard editor behavior. I’ll confirm delete **clamps** past end-of-line vs throws, and that indices are **0-based** as in the spec.”
+
+### Flow — cover in this order
+
+1. **Clarify** — Unicode code points vs bytes (Python `str`), clamping rules, cursor in scope or not.  
+2. **Invariants** — after any operation, `lines` is a list of strings with no `\n`; undo restores prior state.  
+3. **Entities** — `DocumentState`, `Command` interface, `TextEditor` with stacks.  
+4. **APIs** — `insert(row, col, text)`, `delete(row, col, length)`, `undo()`, `redo()`.  
+5. **Data structures** — `list[str]`; **two stacks** of commands.  
+6. **Code** — **`InsertCommand` / `DeleteCommand`** (or inline) + **`undo`/`redo`**.  
+7. **Edge cases** — out-of-range row/col, delete length 0, undo empty.  
+8. **Complexity** — O(len) string splice per op on a line; rope if huge lines.  
+9. **Scale** — usually local; mention **operation log** for persistence if asked.  
+10. **Testing** — insert then undo; delete capture for redo path.
+
+### Natural phrases
+
+- “**Delete** needs to **remember what it removed** so undo can put it back.”  
+- “Any **new edit** after undo **invalidates** the redo branch—that’s what users expect.”
+
+### APIs on the board
+
+`insert` · `delete` · `undo` · `redo`.
+
+### Must-code (2–3)
+
+1. **`insert` + undo path** (or `InsertCommand`)  
+2. **`delete` + undo path** (snapshot removed substring)  
+3. **`undo` and `redo`** stack discipline.
+
+### Closing
+
+“If files get huge, I’d swap the line storage for a **rope** or **piece table**; the **command stacks** stay the same.”
+
+### Mental checklist
+
+Command pattern · Two stacks · Clear redo on edit · APIs · Code · Edges · Complexity · Tests.
+
+---
+
 ## Interview opener
 
 > “The document is **list of lines** (strings without embedded newlines). Operations are **per row**: insert characters at column, delete a run of columns. I’ll use the **Command pattern** with **undo** and **redo** stacks; each command implements `execute` and `undo` mutating the document. I’ll confirm whether **cursor** is in scope or only operations given explicitly.”

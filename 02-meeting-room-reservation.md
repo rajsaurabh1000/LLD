@@ -4,6 +4,51 @@
 
 ---
 
+## Interview script & checklist (human speaking)
+
+### Opening
+
+“I’ll treat this as a **fixed set of rooms**. Before I code, I want to align on **interval semantics**—I’ll use **half-open** `[start, end)` so back-to-back meetings don’t count as overlap unless you prefer otherwise. I’ll also confirm **who generates `booking_id`** and whether **cancel** is by id only. My invariant: **two bookings in the same room never overlap in time**.”
+
+### Flow — cover in this order
+
+1. **Clarify** — time type, half-open vs closed, cancel API, list bookings?, concurrency.  
+2. **Invariants** — no overlapping intervals per room; invalid ranges rejected.  
+3. **Entities** — `Scheduler` (or `BookingService`), per-room sorted bookings.  
+4. **APIs** — `book(room_id, start, end, booking_id) -> bool`, `cancel(room_id, booking_id) -> bool`.  
+5. **Data structures** — **sorted list by start** + binary search for neighbors; optional map id → room for fast cancel.  
+6. **Code** — **`book`** (overlap check + insert) and **`cancel`**.  
+7. **Edge cases** — `end <= start`, duplicate id, boundary touch with half-open.  
+8. **Complexity** — “Find position O(log n), list insert O(n)—honest; tree if they need strict log n.”  
+9. **Scale** — room as natural shard; DB unique constraint; optimistic locking.  
+10. **Testing** — adjacent intervals, contained interval, duplicate book.
+
+### Natural phrases
+
+- “Half-open intervals make **adjacency** easy: `[10,20)` and `[20,30)` don’t overlap.”  
+- “I only need to check the **interval before and after** the insertion point.”  
+- “If cancel is hot, I’d add a **`booking_id → room`** map so I don’t scan every slot.”
+
+### APIs on the board
+
+`book(...) -> bool` · `cancel(...) -> bool` · optional `list_bookings(room_id)`.
+
+### Must-code (2–3)
+
+1. **`book`** — validate range, neighbor overlap, sorted insert.  
+2. **`cancel`** — find by id, remove.  
+3. Optional: **`_overlaps_neighbors`** extracted.
+
+### Closing
+
+“This enforces **exclusive use of a room** over time; in production I’d persist with a **uniqueness constraint** on non-overlapping ranges and handle **retries** with idempotent `booking_id`.”
+
+### Mental checklist
+
+Clarified · Invariant (no overlap) · Entities · APIs · DS · `book` + `cancel` coded · Edges · Complexity · Concurrency/DB · Tests.
+
+---
+
 ## Interview opener
 
 > “I’ll keep a **fixed set of rooms**. Each room holds a **sorted list of bookings** by start time. Booking succeeds only if the new interval **doesn’t overlap** any existing one in that room. I’ll confirm interval semantics—**half-open** `[start, end)` is easiest for adjacency (`end == other.start` allowed).”

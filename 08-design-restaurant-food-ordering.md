@@ -4,6 +4,50 @@
 
 ---
 
+## Interview script & checklist (human speaking)
+
+### Opening
+
+“I’ll treat **MenuEntry** as the thing you actually order—a **food name** at a **specific restaurant**—so the same dish name can exist at many places. Ratings attach to an **order**; I’ll roll them up to **restaurant averages** and maintain a **secondary index** for ‘**best restaurants for this food name**.’ I’ll confirm rating scale, **one rating per order**, and whether we **normalize** food names for the index.”
+
+### Flow — cover in this order
+
+1. **Clarify** — rate order vs restaurant, double-rating, tie-break, case sensitivity of food names.  
+2. **Invariants** — order rated at most once; aggregates match sum/count of rated orders rolled up.  
+3. **Entities** — restaurant, menu entry, order, running aggregates global + **per (food, restaurant)**.  
+4. **APIs** — `add_restaurant`, `add_menu_entry`, `place_order`, `rate_order`, `top_restaurants(k)`, `top_restaurants_for_food(food, k)`.  
+5. **Data structures** — hash maps; inverted `normalized_food → {restaurant → agg}` updated on rate.  
+6. **Code** — **`rate_order`** (validate + update aggs) and **one top-k** method.  
+7. **Edge cases** — unknown order, wrong restaurant on line items, duplicate rating.  
+8. **Complexity** — rate O(1) updates; top O(R log R) or heap O(R log k).  
+9. **Scale** — async rollup jobs; idempotent `rate_order` with request id; CQRS for reads.  
+10. **Testing** — two restaurants same food; tie on average.
+
+### Natural phrases
+
+- “I **denormalize aggregates** so ‘top restaurants’ doesn’t rescan every order on every query.”  
+- “For ‘**best for veg burger**’, I use the same pattern but **scoped** to restaurants that serve that normalized key.”
+
+### APIs on the board
+
+Place + rate + two query shapes (global vs per food).
+
+### Must-code (2–3)
+
+1. **`rate_order`**  
+2. **`top_restaurants`** or **`top_restaurants_for_food`**  
+3. Optional **`add_menu_entry`** to show index maintenance.
+
+### Closing
+
+“If reads dominate, I’d serve **materialized leaderboards** from a cache and treat ratings as **append-only events** for replay and audits.”
+
+### Mental checklist
+
+MenuEntry indirection · Aggregates · APIs · `rate_order` + top query · Edges · Complexity · Idempotency · Tests.
+
+---
+
 ## Interview opener
 
 > “Food items and restaurants are separate catalogs. The same **menu item name** can appear at **multiple restaurants** with different **MenuEntry** ids. Users **place orders** (line items reference a specific restaurant’s entry), then **rate orders**. I’ll aggregate **average rating per restaurant** and support **best restaurant overall** and **best for a given food name**.”

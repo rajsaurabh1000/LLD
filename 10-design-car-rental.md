@@ -4,6 +4,50 @@
 
 ---
 
+## Interview script & checklist (human speaking)
+
+### Opening
+
+“I’ll treat bookings as **full-day blocks** on a **calendar**. To avoid off-by-one bugs, I’ll convert to **ordinal days** and use **half-open intervals** internally—e.g. `[pickup_ordinal, return_exclusive_ordinal)`—while narrating how that maps to **inclusive** dates the user sees. Invariant: **no overlapping bookings for the same car**. **`complete_trip`** applies **base rate × booked days** plus **late fees** and any **extras** we agree on.”
+
+### Flow — cover in this order
+
+1. **Clarify** — inclusive vs exclusive end date, late fee per day, early return refund policy, extras.  
+2. **Invariants** — non-overlap per car; `complete_trip` charges consistent with stored booking window.  
+3. **Entities** — `Car` (rates), per-car sorted bookings, `booking_id → booking` for checkout.  
+4. **APIs** — `register_car`, `book(...) -> bool`, `complete_trip(booking_id, actual_return, extras) -> Optional[int]`.  
+5. **Data structures** — same as meeting rooms: sorted intervals + bisect; ordinal math for days.  
+6. **Code** — **`book`** (overlap) and **`complete_trip`** (pricing + remove booking).  
+7. **Edge cases** — invalid date order, late by N days, unknown booking id.  
+8. **Complexity** — book O(n) insert; complete O(1) with map.  
+9. **Scale** — shard by car or region; **PricingEngine** strategy for surge/weekend.  
+10. **Testing** — adjacent bookings; late return fee.
+
+### Natural phrases
+
+- “I store **half-open ordinals** so overlap logic is identical to **room booking**.”  
+- “**Late days** are ‘**actual return ordinal minus last included day**’—I’ll write that carefully on the board.”
+
+### APIs on the board
+
+`register_car` · `book` · `complete_trip` (cents or dollars—pick one).
+
+### Must-code (2–3)
+
+1. **`book`**  
+2. **`complete_trip`**  
+3. Optional **`cancel`** if they want lifecycle.
+
+### Closing
+
+“Production-wise I’d separate **pricing rules** from scheduling, add **idempotent** `book` with a client request id, and persist with a **constraint** preventing overlapping ranges per car.”
+
+### Mental checklist
+
+Ordinal / half-open · No overlap · APIs · `book` + `complete_trip` · Late fee story · Complexity · Tests.
+
+---
+
 ## Interview opener
 
 > “Cars are rentable in **full-day** blocks. I’ll keep **per-car sorted bookings** to prevent overlap, like meeting rooms. **Trip cost** at return time uses **daily rate × days booked** plus optional **late fee** if returned after agreed end, **fuel / damage** add-ons if they want. I’ll confirm timezone and whether **pickup day counts as day 1**.”

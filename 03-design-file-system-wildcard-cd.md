@@ -4,6 +4,51 @@
 
 ---
 
+## Interview script & checklist (human speaking)
+
+### Opening
+
+“I’ll model directories as a **tree** with parent pointers so `pwd` is cheap. For `cd`, I need one clarification: is `*` **one path segment** matching **any single child name**, and if **multiple** matches exist, should we **fail**, pick **deterministically**, or **try all**? I’ll assume we need **correct resolution** and I’ll make ambiguity behavior explicit.”
+
+### Flow — cover in this order
+
+1. **Clarify** — `*` semantics, `..` at root, absolute vs relative, `mkdir -p` style or not.  
+2. **Invariants** — `cwd` always points to a valid node; children names unique per directory.  
+3. **Entities** — `DirNode`, shell with `root` + `cwd`.  
+4. **APIs** — `mkdir(path)`, `pwd() -> str`, `cd(path) -> bool`.  
+5. **Data structures** — tree + `dict` children + **parent** pointer for `pwd`.  
+6. **Code** — **`mkdir`** (walk/create), **`cd`** with tokenization + **backtracking** on `*`.  
+7. **Edge cases** — empty path, only `/`, ambiguous wildcard, missing segment.  
+8. **Complexity** — `pwd` O(depth); worst-case `cd` exponential in wildcards—say it honestly.  
+9. **Scale** — usually in-memory LLD; mention path cache invalidation only if they extend.  
+10. **Testing** — `..`, `/a/b`, unique vs ambiguous `*`.
+
+### Natural phrases
+
+- “I’ll **tokenize** the path and resolve segment by segment.”  
+- “For `*`, I’ll **try children in sorted order** so behavior is deterministic—that’s easy to explain and test.”  
+- “`pwd` is **walk up to root** with parent pointers, then reverse.”
+
+### APIs on the board
+
+`mkdir` · `pwd` · `cd` → bool.
+
+### Must-code (2–3)
+
+1. **`mkdir`**  
+2. **`cd`** (including `*` handling)  
+3. **`pwd`** or `_resolve_parts` if they want the core recursive piece.
+
+### Closing
+
+“This matches an **in-memory shell**; if we added **rename** or **symlinks**, I’d revisit how `pwd` and `cd` resolve and whether we need a **visited set** for cycles.”
+
+### Mental checklist
+
+Wildcard semantics agreed · Tree + parent · APIs · `mkdir` / `cd` / `pwd` · Edges · Complexity · Tests.
+
+---
+
 ## Interview opener
 
 > “I’ll model directories as a **tree** of nodes; each node has a name and children map. `pwd` tracks the **current node** from root. `mkdir` creates missing segments. For `cd`, I’ll parse absolute vs relative paths; the only special piece is `*` as a **segment wildcard** matching **exactly one** child name—I’ll confirm whether `*` can match multiple characters across segments or only ‘any single directory name’ in one segment.”

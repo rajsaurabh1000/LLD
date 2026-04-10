@@ -4,6 +4,51 @@
 
 ---
 
+## Interview script & checklist (human speaking)
+
+### Opening
+
+“Each user has **one team** of players; **user score** is the **sum of current player points**. When a player’s score changes, I need to update **every user who has that player**, so I’ll keep a **reverse index** from player to users—not just forward team membership. For Top-K, I’ll be explicit: I can do a **full sort** for clarity or a **heap** if we optimize for large `U` and small `K`.”
+
+### Flow — cover in this order
+
+1. **Clarify** — one team per user?, points **set vs delta**, tie-break for Top-K, K per query.  
+2. **Invariants** — `user_score[user]` always equals sum of current scores of that user’s players.  
+3. **Entities** — leaderboard service, maps for team, player scores, **player → users**.  
+4. **APIs** — `register_user_team`, `update_player_points`, `top_k`.  
+5. **Data structures** — hash maps + reverse index; Top-K via sort or heap.  
+6. **Code** — **`update_player_points`** (propagate delta) and **`top_k`**.  
+7. **Edge cases** — unknown player, empty leaderboard, ties (break by `user_id`).  
+8. **Complexity** — update O(fans of player); naive Top-K O(U log U).  
+9. **Scale** — shard by user; async materialized leaderboard; approximate Top-K only if they allow.  
+10. **Testing** — one player on many users; overlapping updates.
+
+### Natural phrases
+
+- “The **denormalized user total** is what makes Top-K reads cheap; I pay on **player update**.”  
+- “Without the **reverse index**, every player update devolves into scanning **all users**.”  
+- “If Top-K is called constantly, I’d maintain a **sorted structure** or **lazy heap**—I’ll name the trade-off.”
+
+### APIs on the board
+
+`register_user_team(user_id, player_ids)` · `update_player_points(player_id, new_points)` · `top_k(k) -> list[(user, score)]`.
+
+### Must-code (2–3)
+
+1. **`update_player_points`**  
+2. **`top_k`**  
+3. Optional: **`register_user_team`** if they want full consistency story.
+
+### Closing
+
+“This is **consistent in memory** under a single lock; distributed version would **shard by user**, use **idempotent score events**, and separate **read-optimized** leaderboard projection.”
+
+### Mental checklist
+
+Reverse index · Invariant on totals · APIs · DS · `update` + `top_k` · Edges · Complexity · Sharding/concurrency · Tests.
+
+---
+
 ## Interview opener
 
 > “Each user has **one team** of players. User score = **sum of current player points**. When a player’s points change, I need to **update every user** who owns that player. For Top-K users, I’ll keep a **heap** or **sorted structure** of scores; with many updates, a **lazy** or **tree map** approach works. In Python I’ll use `heapq` with **lazy deletion** or rescan if K is small.”

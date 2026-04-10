@@ -4,6 +4,50 @@
 
 ---
 
+## Interview script & checklist (human speaking)
+
+### Opening
+
+“I’ll model **floors** and a **grid** of spots, each spot typed for **2W or 4W**. When you say **nearest**, I’ll interpret that as **lowest floor, then row-major order** unless you want a different metric. Invariant: **a spot holds at most one vehicle**; we return a **ticket** so `unpark` is O(1) lookup.”
+
+### Flow — cover in this order
+
+1. **Clarify** — nearest rule, vehicle types, full lot behavior, concurrent park.  
+2. **Invariants** — one occupant per spot; ticket maps to exactly one spot.  
+3. **Entities** — lot, `SpotId`, free **deques** per policy, ticket store.  
+4. **APIs** — `park(vehicle_kind) -> Optional[Ticket]`, `unpark(ticket_id) -> bool`.  
+5. **Data structures** — **deque per floor** (or per floor+kind) pre-filled in scan order; map `spot → kind` for returning to correct free pool.  
+6. **Code** — **`park`** and **`unpark`**.  
+7. **Edge cases** — full lot, wrong ticket, double unpark.  
+8. **Complexity** — O(1) park/unpark with pre-bucketed free lists.  
+9. **Scale** — **per-floor locks**; striping if needed.  
+10. **Testing** — fill and fail; unpark frees correct type queue.
+
+### Natural phrases
+
+- “I’m using **deques** so ‘nearest’ is just **pop front** from the precomputed order.”  
+- “On **unpark**, I need to know the spot’s **kind** so I push back to the **right** free queue.”
+
+### APIs on the board
+
+`park` · `unpark` · optional `status`.
+
+### Must-code (2–3)
+
+1. **`park`**  
+2. **`unpark`**  
+3. Optional **init** that builds free queues (explain verbally if low on time).
+
+### Closing
+
+“If contention is high, I’d **lock per floor** instead of the whole lot, with a fixed **lock ordering** on floors to avoid deadlock.”
+
+### Mental checklist
+
+Nearest policy · Two deques or queues · Ticket map · Code · Full lot · Concurrency · Tests.
+
+---
+
 ## Interview opener
 
 > “I’ll model a **parking lot** with floors; each floor has spots in a **row × col** grid. Spots are typed for **two-wheeler** or **four-wheeler**. `park(vehicle)` finds the **nearest** available compatible spot—I'll define nearest as **lowest floor, then row, then column** unless they want a different distance metric. `unpark` frees by **ticket id**.”

@@ -4,6 +4,51 @@
 
 ---
 
+## Interview script & checklist (human speaking)
+
+### Opening
+
+“I’ll separate **catalog** data from **inventory** per show. Users need **discovery** queries—cinemas in a city showing a movie, shows at a cinema for a movie—and **booking**, where the hard part is **no double booking** under concurrency. I’ll ask about **seat identifiers**, whether booking is **all-or-nothing** for a set of seats, and if we need **holds with TTL** or keep scope to immediate commit.”
+
+### Flow — cover in this order
+
+1. **Clarify** — seat model, payment/hold out of scope?, cancel, add cinema/show APIs.  
+2. **Invariants** — a seat can’t be sold twice for the same show; indexes stay consistent with catalog.  
+3. **Entities** — `Show` (availability + lock), service with **denormalized indexes** `(city, movie)→cinemas`, `(cinema, movie)→shows`.  
+4. **APIs** — `add_show`, `list_cinemas(city, movie)`, `list_shows(cinema, movie)`, `book(show, seats) -> bool`.  
+5. **Data structures** — `set` of seats per show; inverted indexes for queries.  
+6. **Code** — **`book`** under **per-show lock**; **`add_show`** updating indexes.  
+7. **Edge cases** — partial failure (reject if any seat taken), unknown show, empty seat set.  
+8. **Complexity** — book O(k) seats; listing O(result size).  
+9. **Scale** — show as contention unit; read replicas for listings; idempotent booking token.  
+10. **Testing** — concurrent two buyers, same last seat.
+
+### Natural phrases
+
+- “I’m **denormalizing** for read paths: writes to shows are rarer than ‘browse by city and movie’.”  
+- “**All-or-nothing** seat booking is one transaction under one lock—simple to reason about.”  
+- “If we add **holds**, I’d store `held_until` and sweep expired holds before confirm.”
+
+### APIs on the board
+
+Discovery APIs + `book(show_id, seats)`.
+
+### Must-code (2–3)
+
+1. **`book`** (atomic subset check + remove).  
+2. **`add_show`** (create show + update both indexes).  
+3. Optional one **list** method.
+
+### Closing
+
+“At scale the **show shard** is the bottleneck; I’d **pin inventory to one writer**, cache **listings**, and use **idempotent** `book` with a request id for retries.”
+
+### Mental checklist
+
+Indexes + inventory · Invariant on seats · APIs · `book` atomicity · Concurrency story · Tests.
+
+---
+
 ## Interview opener
 
 > “I’ll separate **catalog** (cities, cinemas, screens, shows) from **booking** (seat sets per show). Users need: add cinema/show, **list cinemas in a city** showing a movie, **list shows at a cinema** for a movie, and **book seats** atomically without double booking. I’ll confirm seat layout (rows/cols vs seat ids) and whether we need **hold + expiry**.”

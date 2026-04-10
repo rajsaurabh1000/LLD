@@ -4,6 +4,59 @@
 
 ---
 
+## Interview script & checklist (human speaking)
+
+Use this **out loud** in the room. The sections below are backup if they go deeper.
+
+### Opening (first 20–30 seconds)
+
+“Before I design, let me **clarify**: are hits **per page** or one global counter? Is the window **fixed** (e.g. five minutes) or **parameterized**? Should I assume **multi-threaded** callers, and can I **inject time** for tests? Once we agree, I’ll state one **invariant**: **`get_hits` never counts events outside the sliding window** relative to `now`.”
+
+### Flow — cover in this order (SDE2 signal)
+
+1. **Clarify** — page vs global, window, threading, clock.  
+2. **Invariants** — stale buckets contribute zero; each bucket maps to one calendar minute.  
+3. **Entities** — a service holding `page_id → counter`, and a per-page counter object.  
+4. **APIs on the board** — `record_hit`, `get_hits` (signatures + what “now” means).  
+5. **Data structures** — **minute ring buffer** per page; justify vs storing every timestamp.  
+6. **Code** — **`record_hit`** and **`get_hits`** fully (rotation / expiry is the hard part).  
+7. **Edge cases** — new page, window of 1, boundary minutes, optional “clock backward.”  
+8. **Complexity** — “Update is O(1) per bucket slot; query is O(window) unless we maintain a running sum.”  
+9. **Scale / concurrency** — shard by page; **lock per page**; Redis / streams if distributed.  
+10. **Testing** — inject `now`; cases at minute boundaries.
+
+### Natural phrases (sound human, not memorized)
+
+- “Let me **play back** the time model so we don’t bake in the wrong semantics.”  
+- “I’m optimizing for **bounded memory**: O(window) per page, not O(number of hits).”  
+- “If you need **second-level** accuracy, I’d switch to second buckets or a deque of timestamps—same idea, different trade-off.”  
+- “Under load I’d avoid one **global lock**; **per-page** isolation is the first lever.”
+
+### APIs to write on the board
+
+- `record_hit(page_id)`  
+- `get_hits(page_id)` — and whether `now` is implicit or passed in.
+
+### Must-code in the round (2–3)
+
+1. **`record_hit`** (bucket index + expire stale).  
+2. **`get_hits`** (sum valid buckets after rotation).  
+3. Optional: **`_expire_stale` / rotate** if they want it factored.
+
+### Edge cases — mention aloud
+
+Empty page; first hit; window length 1; high cardinality of pages → **evict idle** counters if they bring it up.
+
+### Strong closing
+
+“This fits **in-memory exact counting**; at Uber scale I’d **shard by page**, use **per-page concurrency control**, and only then talk **approximate** structures if the product allows.”
+
+### Mental checklist (10 seconds before you stop)
+
+Clarified · Invariants · Entities · APIs · DS + why · Code (2–3) · Edges · Complexity · Concurrency/sharding · Testing.
+
+---
+
 ## How to open the interview (30 seconds)
 
 > “I’ll model this as a service that records hits **per page** and answers **how many hits in the last N minutes** (or last 5 minutes if fixed). I’ll use a **fixed-size time bucket** structure per page so we don’t store every event, and I’ll ask whether we need thread safety and what time resolution we should use.”
